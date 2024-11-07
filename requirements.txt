@@ -1,0 +1,2 @@
+# Dependencies will be added here as needed 
+pytest>=7.0.0 

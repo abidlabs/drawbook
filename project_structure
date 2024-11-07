@@ -1,0 +1,11 @@
+drawbook/
+├── src/
+│   └── drawbook/
+│       ├── __init__.py
+│       └── core.py
+├── tests/
+│   ├── __init__.py
+│   └── test_core.py
+├── pyproject.toml
+├── requirements.txt
+└── README.md 
