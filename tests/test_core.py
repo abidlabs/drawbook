@@ -1,14 +1,28 @@
-from drawbook.core import Canvas
+from drawbook.core import Book
+from pathlib import Path
 
-def test_canvas_initialization():
-    canvas = Canvas(10, 10)
-    assert canvas.width == 10
-    assert canvas.height == 10
-    assert len(canvas.pixels) == 10
-    assert len(canvas.pixels[0]) == 10
+def test_book_creation():
+    book = Book()
+    assert book.title == "Untitled Book"
+    assert book.pages == []
+    assert book.illustrations == []
 
-def test_canvas_clear():
-    canvas = Canvas(5, 5)
-    canvas.pixels[0][0] = "test"
-    canvas.clear()
-    assert canvas.pixels[0][0] is None 
+def test_book_with_parameters():
+    book = Book(
+        title="My Book",
+        pages=["Page 1", "Page 2"],
+        illustrations=[None, False]
+    )
+    assert book.title == "My Book"
+    assert len(book) == 2
+    assert book.illustrations == [None, False]
+
+def test_export():
+    book = Book(
+        title="Test Book",
+        pages=["Page 1", "Page 2"],
+        illustrations=[None, False]
+    )
+    book.export()
+    # Note: We can't easily test the exact file location since it's temporary,
+    # but we can verify the method runs without errors 
