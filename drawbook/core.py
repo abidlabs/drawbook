@@ -3,14 +3,14 @@ Core functionality for the drawbook library.
 """
 
 from pathlib import Path
-from typing import List
+from typing import List, Literal
 import tempfile
 import io
 import requests
 import warnings
 from tqdm import tqdm
 from PIL import Image
-from huggingface_hub import HfApi
+import huggingface_hub
 from pptx import Presentation
 from pptx.util import Inches
 from pptx.enum.text import PP_ALIGN
@@ -22,7 +22,8 @@ class Book:
         self,
         title: str = "Untitled Book",
         pages: List[str] = None,
-        illustrations: List[str | None | bool] = None,
+        title_illustration: str | Literal[False] | None = None,
+        illustrations: List[str | None | Literal[False]] = None,
         lora: str = "SebastianBodza/Flux_Aquarell_Watercolor_v2"
     ):
         """
@@ -39,6 +40,7 @@ class Book:
         self.pages = pages or []
         self.illustrations = illustrations or []
         self.lora = lora
+        self.title_illustration = title_illustration
         
         # Ensure illustrations list matches pages length
         while len(self.illustrations) < len(self.pages):
@@ -46,7 +48,10 @@ class Book:
 
     def _get_prompt(self, text: str) -> str:
         """Get the prompt for the given text using the LoRA model."""
-        return f"A AQUACOLTOK watercolor painting to illustrate the following text: {text}"
+        if self.lora == "SebastianBodza/Flux_Aquarell_Watercolor_v2":
+            return f"A AQUACOLTOK watercolor painting to illustrate the following text: {text}"
+        else:
+            return f"An illustration of the following text: {text}"
     
     def export(self, filename: str | Path | None = None) -> None:
         """
@@ -76,18 +81,35 @@ class Book:
         # Add font styling to title
         title.text_frame.paragraphs[0].font.name = "Noteworthy"
         
+        # Add title illustration if available
+        if isinstance(self.title_illustration, str):
+            try:
+                slide.shapes.add_picture(
+                    self.title_illustration,
+                    Inches(1), Inches(2),  # Positioned below title
+                    Inches(8), Inches(4)   # Same size as other illustrations
+                )
+            except Exception as e:
+                print(f"Warning: Could not add title illustration: {e}")
+        
         # Add content slides
         content_slide_layout = prs.slide_layouts[5]  # Blank layout
         
         for page_num, (text, illustration) in enumerate(zip(self.pages, self.illustrations)):
             slide = prs.slides.add_slide(content_slide_layout)
             
-            # Add text
+            # Determine if text should be above or below illustration
+            text_on_top = page_num % 2 == 0
+            text_y = Inches(0.5) if text_on_top else Inches(4.5)
+            illustration_y = Inches(2) if text_on_top else Inches(0.5)
+            
+            # Add text with center alignment
             txBox = slide.shapes.add_textbox(
-                Inches(0.5), Inches(0.5),
+                Inches(0.5), text_y,
                 Inches(9), Inches(1)
             )
             tf = txBox.text_frame
+            tf.word_wrap = True
             
             # Special formatting for first page
             if page_num == 0 and text:
@@ -105,17 +127,19 @@ class Book:
                 run.text = rest_of_text
                 run.font.size = Inches(0.25)  # Regular text size
                 run.font.name = "Geneva"
+                p.alignment = PP_ALIGN.CENTER  # Center align the first paragraph
             else:
                 tf.text = text
                 tf.paragraphs[0].font.name = "Geneva"
-                tf.paragraphs[0].font.size = Inches(0.25)  # Match size with first page
+                tf.paragraphs[0].font.size = Inches(0.25)
+                tf.paragraphs[0].alignment = PP_ALIGN.CENTER  # Center align the text
             
             # Add illustration if available
             if isinstance(illustration, str):
                 try:
                     slide.shapes.add_picture(
                         illustration,
-                        Inches(1), Inches(2),
+                        Inches(1), illustration_y,
                         Inches(8), Inches(4)
                     )
                 except Exception as e:
@@ -150,8 +174,7 @@ class Book:
                      If None, creates a temporary directory.
         """
         # Get HF token
-        hf_api = HfApi()
-        token = hf_api.get_token()
+        token = huggingface_hub.get_token()
         if not token:
             warnings.warn("No Hugging Face token found. Please login using `huggingface-cli login` or set the HF_TOKEN environment variable. Otherwise, you may be rate limited.")
 
@@ -166,6 +189,21 @@ class Book:
             save_dir = Path(tempfile.mkdtemp())
 
         print("Generating illustrations... This could take a few minutes.")
+
+        # Generate title illustration if needed
+        if self.title_illustration is None:
+            try:
+                prompt = self._get_prompt(self.title)
+                response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+                if response.status_code == 200:
+                    image = Image.open(io.BytesIO(response.content))
+                    image_path = save_dir / "title.png"
+                    image.save(image_path)
+                    self.title_illustration = str(image_path)
+                else:
+                    print(f"Warning: Failed to generate title illustration: {response.text}")
+            except Exception as e:
+                print(f"Warning: Error generating title illustration: {e}")
 
         for i, (text, current_illust) in enumerate(tqdm(zip(self.pages, self.illustrations), total=len(self.pages))):
             # Skip if illustration already exists or is explicitly disabled
