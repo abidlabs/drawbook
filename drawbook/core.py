@@ -14,6 +14,9 @@ import huggingface_hub
 from pptx import Presentation
 from pptx.util import Inches
 from pptx.enum.text import PP_ALIGN
+from pptx.enum.shapes import MSO_SHAPE
+from pptx.dml.color import RGBColor
+from pptx.enum.dml import MSO_PATTERN
 
 class Book:
     """A class representing a children's book that can be exported to PowerPoint."""
@@ -24,7 +27,8 @@ class Book:
         pages: List[str] = None,
         title_illustration: str | Literal[False] | None = None,
         illustrations: List[str | None | Literal[False]] = None,
-        lora: str = "SebastianBodza/Flux_Aquarell_Watercolor_v2"
+        lora: str = "SebastianBodza/Flux_Aquarell_Watercolor_v2",
+        author: str | None = None
     ):
         """
         Initialize a new Book.
@@ -35,12 +39,14 @@ class Book:
             illustrations: List of illustration paths or placeholders
                          (str for path, None for pending, False for no illustration)
             lora: The LoRA model on Hugging Face to use for illustrations
+            author: The book's author name
         """
         self.title = title
         self.pages = pages or []
         self.illustrations = illustrations or []
         self.lora = lora
         self.title_illustration = title_illustration
+        self.author = author
         
         # Ensure illustrations list matches pages length
         while len(self.illustrations) < len(self.pages):
@@ -76,21 +82,47 @@ class Book:
         # Add title slide
         title_slide_layout = prs.slide_layouts[0]
         slide = prs.slides.add_slide(title_slide_layout)
+        
+        # Add diagonal striped border at the top
+        border = slide.shapes.add_shape(
+            MSO_SHAPE.RECTANGLE,
+            Inches(0), Inches(0),
+            Inches(10), Inches(0.5)
+        )
+        border.fill.patterned()
+        border.fill.pattern = MSO_PATTERN.DIAGONAL_BRICK
+        border.fill.fore_color.rgb = RGBColor(128, 0, 0)  # Maroon
+        border.fill.back_color.rgb = RGBColor(255, 255, 255)  # White
+        
+        # Add title at the top
         title = slide.shapes.title
+        title.top = Inches(0.7)  # Position below border
         title.text = self.title
-        # Add font styling to title
         title.text_frame.paragraphs[0].font.name = "Noteworthy"
+        title.text_frame.paragraphs[0].font.color.rgb = RGBColor(128, 0, 0)  # Maroon
         
         # Add title illustration if available
         if isinstance(self.title_illustration, str):
             try:
                 slide.shapes.add_picture(
                     self.title_illustration,
-                    Inches(1), Inches(2),  # Positioned below title
-                    Inches(8), Inches(4)   # Same size as other illustrations
+                    Inches(2), Inches(2.5),  # Centered horizontally, positioned below title
+                    Inches(6), Inches(6)     # Square dimensions
                 )
             except Exception as e:
                 print(f"Warning: Could not add title illustration: {e}")
+        
+        # Add author if available
+        if self.author is not None:
+            author_box = slide.shapes.add_textbox(
+                Inches(0), Inches(8.5),  # Position at bottom
+                Inches(10), Inches(0.5)
+            )
+            author_frame = author_box.text_frame
+            author_frame.text = f"Written by {self.author}"
+            author_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+            author_frame.paragraphs[0].font.name = "Geneva"
+            author_frame.paragraphs[0].font.size = Inches(0.2)
         
         # Add content slides
         content_slide_layout = prs.slide_layouts[5]  # Blank layout
@@ -190,22 +222,14 @@ class Book:
 
         print("Generating illustrations... This could take a few minutes.")
 
-        # Generate title illustration if needed
+        # Create a list of tasks for the progress bar
+        tasks = []
         if self.title_illustration is None:
-            try:
-                prompt = self._get_prompt(self.title)
-                response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
-                if response.status_code == 200:
-                    image = Image.open(io.BytesIO(response.content))
-                    image_path = save_dir / "title.png"
-                    image.save(image_path)
-                    self.title_illustration = str(image_path)
-                else:
-                    print(f"Warning: Failed to generate title illustration: {response.text}")
-            except Exception as e:
-                print(f"Warning: Error generating title illustration: {e}")
+            tasks.append(("title", self.title, None))
+        tasks.extend((f"page_{i+1}", text, current_illust) 
+                     for i, (text, current_illust) in enumerate(zip(self.pages, self.illustrations)))
 
-        for i, (text, current_illust) in enumerate(tqdm(zip(self.pages, self.illustrations), total=len(self.pages))):
+        for task_name, text, current_illust in tqdm(tasks, desc="Generating illustrations"):
             # Skip if illustration already exists or is explicitly disabled
             if isinstance(current_illust, str) or current_illust is False:
                 continue
@@ -215,19 +239,23 @@ class Book:
                 prompt = self._get_prompt(text)
                 response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
                 if response.status_code != 200:
-                    print(f"Warning: Failed to generate illustration for page {i+1}: {response.text}")
+                    print(f"Warning: Failed to generate illustration for {task_name}: {response.text}")
                     continue
                     
                 # Save the image
                 image = Image.open(io.BytesIO(response.content))
-                image_path = save_dir / f"page_{i+1}.png"
+                image_path = save_dir / f"{task_name}.png"
                 image.save(image_path)
                 
-                # Update the illustrations list
-                self.illustrations[i] = str(image_path)
-                
+                # Update the appropriate illustration reference
+                if task_name == "title":
+                    self.title_illustration = str(image_path)
+                else:
+                    page_num = int(task_name.split('_')[1]) - 1
+                    self.illustrations[page_num] = str(image_path)
+                    
             except Exception as e:
-                print(f"Warning: Error generating illustration for page {i+1}: {e}")
+                print(f"Warning: Error generating illustration for {task_name}: {e}")
                 continue
 
         print(f"Illustrations saved to: {save_dir}")
