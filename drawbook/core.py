@@ -34,14 +34,23 @@ class Book:
         while len(self.illustrations) < len(self.pages):
             self.illustrations.append(None)
     
-    def export(self) -> None:
+    def export(self, filename: str | Path | None = None) -> None:
         """
-        Export the book to a PowerPoint file in a temporary location and print the path.
+        Export the book to a PowerPoint file.
+        
+        Args:
+            filename: Optional path where to save the file. If None, creates in temp directory.
         """
-        # Create temp file with .pptx extension
-        temp_file = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
-        output_path = Path(temp_file.name)
-        temp_file.close()
+        if filename is None:
+            # Create temp file with .pptx extension
+            temp_file = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
+            output_path = Path(temp_file.name)
+            temp_file.close()
+        else:
+            # Convert to Path object and resolve to absolute path
+            output_path = Path(filename).resolve()
+            # Ensure parent directories exist
+            output_path.parent.mkdir(parents=True, exist_ok=True)
 
         prs = Presentation()
         
