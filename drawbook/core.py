@@ -55,9 +55,9 @@ class Book:
     def _get_prompt(self, text: str) -> str:
         """Get the prompt for the given text using the LoRA model."""
         if self.lora == "SebastianBodza/Flux_Aquarell_Watercolor_v2":
-            return f"A AQUACOLTOK watercolor painting to illustrate the following text: {text}"
+            return f"A AQUACOLTOK watercolor painting with a white background to illustrate the following text in a children's book: {text}"
         else:
-            return f"An illustration of the following text: {text}"
+            return f"An illustration of the following text in a children's book: {text}"
     
     def export(self, filename: str | Path | None = None) -> None:
         """
@@ -89,33 +89,33 @@ class Book:
             Inches(0), Inches(0),
             Inches(10), Inches(0.5)
         )
-        border.fill.patterned()
-        border.fill.pattern = MSO_PATTERN.DIAGONAL_BRICK
+        border.fill.solid()
         border.fill.fore_color.rgb = RGBColor(128, 0, 0)  # Maroon
-        border.fill.back_color.rgb = RGBColor(255, 255, 255)  # White
         
-        # Add title at the top
+        # Add title with adjusted positioning and z-order
         title = slide.shapes.title
-        title.top = Inches(0.7)  # Position below border
+        title.top = Inches(1.0)  # Increased spacing from top
+        title.height = Inches(1.0)  # Explicit height to ensure visibility
         title.text = self.title
         title.text_frame.paragraphs[0].font.name = "Noteworthy"
         title.text_frame.paragraphs[0].font.color.rgb = RGBColor(128, 0, 0)  # Maroon
+        title.text_frame.paragraphs[0].font.size = Inches(0.5)  # Explicit font size
         
         # Add title illustration if available
         if isinstance(self.title_illustration, str):
             try:
                 slide.shapes.add_picture(
                     self.title_illustration,
-                    Inches(2), Inches(2.5),  # Centered horizontally, positioned below title
-                    Inches(6), Inches(6)     # Square dimensions
+                    Inches(2), Inches(2.5),
+                    Inches(6), Inches(5)     # Reduced height to make room for author
                 )
             except Exception as e:
                 print(f"Warning: Could not add title illustration: {e}")
         
-        # Add author if available
+        # Add author with adjusted positioning
         if self.author is not None:
             author_box = slide.shapes.add_textbox(
-                Inches(0), Inches(8.5),  # Position at bottom
+                Inches(0), Inches(7.5),  # Moved up from bottom
                 Inches(10), Inches(0.5)
             )
             author_frame = author_box.text_frame
