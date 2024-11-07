@@ -1,3 +1,7 @@
 # Dependencies will be added here as needed 
 pytest>=7.0.0
 python-pptx>=0.6.21
+huggingface-hub>=0.20.1
+requests>=2.31.0
+tqdm>=4.66.1
+Pillow>=10.0.0

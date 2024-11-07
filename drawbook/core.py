@@ -5,8 +5,14 @@ Core functionality for the drawbook library.
 from pathlib import Path
 from typing import List
 import tempfile
+import io
+import requests
+from tqdm import tqdm
+from PIL import Image
+from huggingface_hub import HfApi
 from pptx import Presentation
 from pptx.util import Inches
+from pptx.enum.text import PP_ALIGN
 
 class Book:
     """A class representing a children's book that can be exported to PowerPoint."""
@@ -106,6 +112,18 @@ class Book:
                     )
                 except Exception as e:
                     print(f"Warning: Could not add illustration on page {page_num + 1}: {e}")
+            
+            # Add page number at bottom center
+            page_number = page_num + 1  # Add 1 since page_num is 0-based
+            page_num_box = slide.shapes.add_textbox(
+                Inches(0), Inches(6.5),  # Y position near bottom of slide
+                Inches(10), Inches(0.5)  # Full width of slide for centering
+            )
+            page_num_frame = page_num_box.text_frame
+            page_num_frame.text = str(page_number)
+            page_num_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
+            page_num_frame.paragraphs[0].font.name = "Geneva"
+            page_num_frame.paragraphs[0].font.size = Inches(0.15)  # Slightly smaller than main text
         
         # Save the presentation
         prs.save(str(output_path))
@@ -114,3 +132,60 @@ class Book:
     def __len__(self) -> int:
         """Return the number of pages in the book."""
         return len(self.pages)
+
+    def illustrate(self, save_dir: str | Path | None = None) -> None:
+        """
+        Generate illustrations for all pages using the Hugging Face Inference API.
+        
+        Args:
+            save_dir: Optional directory to save the generated images. 
+                     If None, creates a temporary directory.
+        """
+        # Get HF token
+        hf_api = HfApi()
+        token = hf_api.get_token()
+        if not token:
+            raise ValueError("No Hugging Face token found. Please login using `huggingface-cli login`")
+
+        API_URL = "https://api-inference.huggingface.co/models/SebastianBodza/Flux_Aquarell_Watercolor_v2"
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Create save directory if provided
+        if save_dir:
+            save_dir = Path(save_dir)
+            save_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            save_dir = Path(tempfile.mkdtemp())
+
+        print("Generating illustrations... This could take a few minutes.")
+        
+        # Generate illustrations for each page
+        for i, (text, current_illust) in enumerate(tqdm(zip(self.pages, self.illustrations), total=len(self.pages))):
+            # Skip if illustration already exists
+            if isinstance(current_illust, str):
+                continue
+                
+            # Skip if illustration is explicitly disabled
+            if current_illust is False:
+                continue
+                
+            try:
+                # Query the API
+                response = requests.post(API_URL, headers=headers, json={"inputs": text})
+                if response.status_code != 200:
+                    print(f"Warning: Failed to generate illustration for page {i+1}: {response.text}")
+                    continue
+                    
+                # Save the image
+                image = Image.open(io.BytesIO(response.content))
+                image_path = save_dir / f"page_{i+1}.png"
+                image.save(image_path)
+                
+                # Update the illustrations list
+                self.illustrations[i] = str(image_path)
+                
+            except Exception as e:
+                print(f"Warning: Error generating illustration for page {i+1}: {e}")
+                continue
+
+        print(f"Illustrations saved to: {save_dir}")
