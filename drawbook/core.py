@@ -50,8 +50,8 @@ class Book:
         slide = prs.slides.add_slide(title_slide_layout)
         title = slide.shapes.title
         title.text = self.title
-        # Add font styling to title with fallbacks
-        title.text_frame.paragraphs[0].font.name = "Noteworthy, Arial Rounded MT Bold, Arial"
+        # Add font styling to title
+        title.text_frame.paragraphs[0].font.name = "Noteworthy"
         
         # Add content slides
         content_slide_layout = prs.slide_layouts[5]  # Blank layout
@@ -76,15 +76,15 @@ class Book:
                 run = p.add_run()
                 run.text = first_char
                 run.font.size = Inches(0.3)  # Make first letter larger
-                run.font.name = "Georgia"
+                run.font.name = "Geneva"
                 
                 run = p.add_run()
                 run.text = rest_of_text
                 run.font.size = Inches(0.25)  # Regular text size
-                run.font.name = "Georgia"
+                run.font.name = "Geneva"
             else:
                 tf.text = text
-                tf.paragraphs[0].font.name = "Georgia"
+                tf.paragraphs[0].font.name = "Geneva"
                 tf.paragraphs[0].font.size = Inches(0.25)  # Match size with first page
             
             # Add illustration if available
