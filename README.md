@@ -50,10 +50,3 @@ Contributions to Drawbook are welcome! If you have ideas for new features or imp
 
 ## License
 Drawbook is open-source software licensed under the [MIT License](LICENSE).
-
----
-
-Happy illustrating with Drawbook! Create your next children’s book with ease and let your creativity soar.
-```
-
-Feel free to copy and use this directly in your project!
