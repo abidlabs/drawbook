@@ -7,6 +7,7 @@ from typing import List
 import tempfile
 import io
 import requests
+import warnings
 from tqdm import tqdm
 from PIL import Image
 from huggingface_hub import HfApi
@@ -21,7 +22,8 @@ class Book:
         self,
         title: str = "Untitled Book",
         pages: List[str] = None,
-        illustrations: List[str | None | bool] = None
+        illustrations: List[str | None | bool] = None,
+        lora: str = "SebastianBodza/Flux_Aquarell_Watercolor_v2"
     ):
         """
         Initialize a new Book.
@@ -31,14 +33,20 @@ class Book:
             pages: List of strings containing text for each page
             illustrations: List of illustration paths or placeholders
                          (str for path, None for pending, False for no illustration)
+            lora: The LoRA model on Hugging Face to use for illustrations
         """
         self.title = title
         self.pages = pages or []
         self.illustrations = illustrations or []
+        self.lora = lora
         
         # Ensure illustrations list matches pages length
         while len(self.illustrations) < len(self.pages):
             self.illustrations.append(None)
+
+    def _get_prompt(self, text: str) -> str:
+        """Get the prompt for the given text using the LoRA model."""
+        return f"A AQUACOLTOK watercolor painting to illustrate the following text: {text}"
     
     def export(self, filename: str | Path | None = None) -> None:
         """
@@ -145,9 +153,9 @@ class Book:
         hf_api = HfApi()
         token = hf_api.get_token()
         if not token:
-            raise ValueError("No Hugging Face token found. Please login using `huggingface-cli login`")
+            warnings.warn("No Hugging Face token found. Please login using `huggingface-cli login` or set the HF_TOKEN environment variable. Otherwise, you may be rate limited.")
 
-        API_URL = "https://api-inference.huggingface.co/models/SebastianBodza/Flux_Aquarell_Watercolor_v2"
+        API_URL = f"https://api-inference.huggingface.co/models/{self.lora}"
         headers = {"Authorization": f"Bearer {token}"}
 
         # Create save directory if provided
@@ -158,20 +166,16 @@ class Book:
             save_dir = Path(tempfile.mkdtemp())
 
         print("Generating illustrations... This could take a few minutes.")
-        
-        # Generate illustrations for each page
+
         for i, (text, current_illust) in enumerate(tqdm(zip(self.pages, self.illustrations), total=len(self.pages))):
-            # Skip if illustration already exists
-            if isinstance(current_illust, str):
-                continue
-                
-            # Skip if illustration is explicitly disabled
-            if current_illust is False:
+            # Skip if illustration already exists or is explicitly disabled
+            if isinstance(current_illust, str) or current_illust is False:
                 continue
                 
             try:
                 # Query the API
-                response = requests.post(API_URL, headers=headers, json={"inputs": text})
+                prompt = self._get_prompt(text)
+                response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
                 if response.status_code != 200:
                     print(f"Warning: Failed to generate illustration for page {i+1}: {response.text}")
                     continue
