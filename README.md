@@ -4,7 +4,7 @@ Drawbook is a Python library that helps you create illustrated children's books 
 
 ## Features
 - **AI-Generated Illustrations**: Automatically create watercolor illustrations based on the text you provide.
-- **PowerPoint Formatting**: Easily format your book content into a PowerPoint presentation.
+- **Book Quickstarter**: Generate an editable presentation (PowerPoint/Google Slides) that serves as a starting point - you can then change the layouts, images, and text to perfect your final design.
 - **User-Friendly API**: Simple and intuitive Python API for creating books with custom titles, pages, and author details.
 
 ## Installation

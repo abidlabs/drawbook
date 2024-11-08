@@ -16,8 +16,6 @@ from pptx.util import Inches
 from pptx.enum.text import PP_ALIGN
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
-import gradio as gr
-from PIL import ImageDraw, ImageFont
 from huggingface_hub import InferenceClient
 
 class Book:
@@ -133,10 +131,21 @@ Return ONLY the illustration description, nothing else."""
         border.fill.solid()
         border.fill.fore_color.rgb = RGBColor(128, 0, 0)  # Maroon
         
+        # Add title illustration first if available
+        if isinstance(self.title_illustration, str):
+            try:
+                slide.shapes.add_picture(
+                    self.title_illustration,
+                    Inches(2.5), Inches(1.5),
+                    Inches(5), Inches(5)
+                )
+            except Exception as e:
+                print(f"Warning: Could not add title illustration: {e}")
+        
         # Add title with adjusted positioning and z-order
         title = slide.shapes.title
-        title.top = Inches(0)  # Increased spacing from top
-        title.height = Inches(2.0)  # Increased height to accommodate two lines
+        title.top = Inches(0)
+        title.height = Inches(2.0)
         title.width = Inches(10)
         
         # Add title text
@@ -162,17 +171,6 @@ Return ONLY the illustration description, nothing else."""
             else:
                 run.font.size = Inches(0.5)   # Regular size for other words
         
-        # Add title illustration if available
-        if isinstance(self.title_illustration, str):
-            try:
-                slide.shapes.add_picture(
-                    self.title_illustration,
-                    Inches(2), Inches(2.5),
-                    Inches(6), Inches(5)     # Reduced height to make room for author
-                )
-            except Exception as e:
-                print(f"Warning: Could not add title illustration: {e}")
-        
         # Add author with adjusted positioning
         if self.author is not None:
             author_box = slide.shapes.add_textbox(
@@ -190,7 +188,16 @@ Return ONLY the illustration description, nothing else."""
         
         for page_num, (text, illustration) in enumerate(zip(self.pages, self.illustrations)):
             slide = prs.slides.add_slide(content_slide_layout)
-            illustration_y = Inches(2)
+            
+            if isinstance(illustration, str):
+                try:
+                    slide.shapes.add_picture(
+                        illustration,
+                        Inches(2.5), Inches(1.4),
+                        Inches(5), Inches(5)
+                    )
+                except Exception as e:
+                    print(f"Warning: Could not add illustration on page {page_num + 1}: {e}")
             
             # Split text into sentences and join with newlines
             sentences = text.replace('. ', '.\n').split('\n')
@@ -235,17 +242,6 @@ Return ONLY the illustration description, nothing else."""
                     p.font.name = "Trebuchet MS"
                     p.font.size = Inches(0.25)
                     p.alignment = PP_ALIGN.CENTER
-            
-            # Add illustration if available
-            if isinstance(illustration, str):
-                try:
-                    slide.shapes.add_picture(
-                        illustration,
-                        Inches(1), illustration_y,
-                        Inches(8), Inches(4)
-                    )
-                except Exception as e:
-                    print(f"Warning: Could not add illustration on page {page_num + 1}: {e}")
             
             # Add page number at bottom center
             page_number = page_num + 1  # Add 1 since page_num is 0-based
