@@ -16,7 +16,8 @@ from pptx.util import Inches
 from pptx.enum.text import PP_ALIGN
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
-from pptx.enum.dml import MSO_PATTERN
+import gradio as gr
+from PIL import ImageDraw, ImageFont
 
 class Book:
     """A class representing a children's book that can be exported to PowerPoint."""
@@ -95,11 +96,29 @@ class Book:
         # Add title with adjusted positioning and z-order
         title = slide.shapes.title
         title.top = Inches(1.0)  # Increased spacing from top
-        title.height = Inches(1.0)  # Explicit height to ensure visibility
-        title.text = self.title
-        title.text_frame.paragraphs[0].font.name = "Noteworthy"
-        title.text_frame.paragraphs[0].font.color.rgb = RGBColor(128, 0, 0)  # Maroon
-        title.text_frame.paragraphs[0].font.size = Inches(0.5)  # Explicit font size
+        title.height = Inches(2.0)  # Increased height to accommodate two lines
+        
+        # Split title into first word and rest
+        title_parts = self.title.split(maxsplit=1)
+        first_word = title_parts[0]
+        rest_of_title = title_parts[1] if len(title_parts) > 1 else ""
+        
+        # Add first word
+        p1 = title.text_frame.paragraphs[0]
+        p1.text = first_word
+        p1.font.name = "Trebuchet MS"
+        p1.font.color.rgb = RGBColor(128, 0, 0)
+        p1.font.size = Inches(0.5)
+        p1.alignment = PP_ALIGN.CENTER
+        
+        # Add rest of title
+        if rest_of_title:
+            p2 = title.text_frame.add_paragraph()
+            p2.text = rest_of_title
+            p2.font.name = "Trebuchet MS"
+            p2.font.color.rgb = RGBColor(128, 0, 0)
+            p2.font.size = Inches(0.5)
+            p2.alignment = PP_ALIGN.CENTER
         
         # Add title illustration if available
         if isinstance(self.title_illustration, str):
@@ -121,7 +140,7 @@ class Book:
             author_frame = author_box.text_frame
             author_frame.text = f"Written by {self.author}"
             author_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
-            author_frame.paragraphs[0].font.name = "Geneva"
+            author_frame.paragraphs[0].font.name = "Trebuchet MS"
             author_frame.paragraphs[0].font.size = Inches(0.2)
         
         # Add content slides
@@ -135,36 +154,46 @@ class Book:
             text_y = Inches(0.5) if text_on_top else Inches(4.5)
             illustration_y = Inches(2) if text_on_top else Inches(0.5)
             
-            # Add text with center alignment
-            txBox = slide.shapes.add_textbox(
-                Inches(0.5), text_y,
-                Inches(9), Inches(1)
-            )
-            tf = txBox.text_frame
-            tf.word_wrap = True
+            # Split text into sentences and join with newlines
+            sentences = text.replace('. ', '.\n').split('\n')
             
             # Special formatting for first page
             if page_num == 0 and text:
-                # Split first character from rest of text
-                first_char = text[0]
-                rest_of_text = text[1:]
+                # Split first character from first sentence
+                first_char = sentences[0][0]
+                first_sentence_rest = sentences[0][1:]
                 
-                p = tf.paragraphs[0]
+                p = slide.shapes.title.text_frame.paragraphs[0]
                 run = p.add_run()
                 run.text = first_char
                 run.font.size = Inches(0.3)  # Make first letter larger
-                run.font.name = "Geneva"
+                run.font.name = "Trebuchet MS"
                 
                 run = p.add_run()
-                run.text = rest_of_text
+                run.text = first_sentence_rest
                 run.font.size = Inches(0.25)  # Regular text size
-                run.font.name = "Geneva"
-                p.alignment = PP_ALIGN.CENTER  # Center align the first paragraph
+                run.font.name = "Trebuchet MS"
+                
+                # Add remaining sentences as new paragraphs
+                for sentence in sentences[1:]:
+                    p = slide.shapes.title.text_frame.add_paragraph()
+                    p.text = sentence
+                    p.font.name = "Trebuchet MS"
+                    p.font.size = Inches(0.25)
+                    p.alignment = PP_ALIGN.CENTER
             else:
-                tf.text = text
-                tf.paragraphs[0].font.name = "Geneva"
-                tf.paragraphs[0].font.size = Inches(0.25)
-                tf.paragraphs[0].alignment = PP_ALIGN.CENTER  # Center align the text
+                # Add each sentence as a separate paragraph
+                first_paragraph = True
+                for sentence in sentences:
+                    if first_paragraph:
+                        p = slide.shapes.title.text_frame.paragraphs[0]
+                        first_paragraph = False
+                    else:
+                        p = slide.shapes.title.text_frame.add_paragraph()
+                    p.text = sentence
+                    p.font.name = "Trebuchet MS"
+                    p.font.size = Inches(0.25)
+                    p.alignment = PP_ALIGN.CENTER
             
             # Add illustration if available
             if isinstance(illustration, str):
@@ -186,7 +215,7 @@ class Book:
             page_num_frame = page_num_box.text_frame
             page_num_frame.text = str(page_number)
             page_num_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
-            page_num_frame.paragraphs[0].font.name = "Geneva"
+            page_num_frame.paragraphs[0].font.name = "Trebuchet MS"
             page_num_frame.paragraphs[0].font.size = Inches(0.15)  # Slightly smaller than main text
         
         # Save the presentation
@@ -259,3 +288,122 @@ class Book:
                 continue
 
         print(f"Illustrations saved to: {save_dir}")
+
+    def _create_page_image(self, page_num: int) -> Image.Image:
+        """Create a PIL Image representation of a book page."""
+        # Create a white background image (same aspect ratio as PPT slide)
+        img = Image.new('RGB', (1000, 750), 'white')
+        draw = ImageDraw.Draw(img)
+        
+        # Try to load a basic font
+        try:
+            font = ImageFont.truetype("Arial.ttf", 36)
+            small_font = ImageFont.truetype("Arial.ttf", 24)
+        except:
+            font = ImageFont.load_default()
+            small_font = ImageFont.load_default()
+
+        text = self.pages[page_num]
+        illustration = self.illustrations[page_num]
+        
+        # Determine text position (alternating top/bottom like in export())
+        text_on_top = page_num % 2 == 0
+        text_y = 50 if text_on_top else 450
+        illustration_y = 200 if text_on_top else 50
+
+        # Split text into sentences and calculate total height
+        sentences = text.replace('. ', '.\n').split('\n')
+        line_height = 40  # Adjust as needed
+        
+        # Draw each sentence on a new line
+        for i, sentence in enumerate(sentences):
+            text_bbox = draw.textbbox((0, 0), sentence, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_x = (1000 - text_width) // 2  # Center text
+            current_y = text_y + (i * line_height)
+            draw.text((text_x, current_y), sentence, fill='black', font=font)
+
+        # Add illustration if available
+        if isinstance(illustration, str):
+            try:
+                illust = Image.open(illustration)
+                illust = illust.resize((800, 400), Image.Resampling.LANCZOS)
+                img.paste(illust, (100, illustration_y))
+            except Exception as e:
+                draw.text((100, illustration_y), f"Illustration error: {e}", fill='red', font=small_font)
+
+        # Add page number
+        page_num_text = str(page_num + 1)
+        draw.text((500, 700), page_num_text, fill='black', font=small_font, anchor="mm")
+
+        return img
+
+    # def preview(self):
+    #     """Launch a Gradio interface for previewing and editing the book."""
+    #     def update_prompt(evt: gr.SelectData) -> str:
+    #         """Update prompt when gallery image is selected."""
+    #         page_num = evt.index
+    #         return self._get_prompt(self.pages[page_num])
+        
+    #     def generate_illustration(prompt: str, evt: gr.SelectData) -> list:
+    #         """Generate new illustration for selected page."""
+    #         page_num = evt.index
+            
+    #         # Get HF token and setup API
+    #         token = huggingface_hub.get_token()
+    #         API_URL = f"https://api-inference.huggingface.co/models/{self.lora}"
+    #         headers = {"Authorization": f"Bearer {token}"}
+            
+    #         try:
+    #             # Generate new illustration
+    #             response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+    #             if response.status_code == 200:
+    #                 # Save the image to a temporary file
+    #                 image = Image.open(io.BytesIO(response.content))
+    #                 temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+    #                 image.save(temp_file.name)
+                    
+    #                 # Update the book's illustration
+    #                 self.illustrations[page_num] = temp_file.name
+                    
+    #                 # Regenerate all page images
+    #                 return [self._create_page_image(i) for i in range(len(self.pages))]
+    #             else:
+    #                 raise Exception(f"API returned status code {response.status_code}")
+    #         except Exception as e:
+    #             print(f"Error generating illustration: {e}")
+    #             return None
+
+    #     # Create initial page images
+    #     page_images = [self._create_page_image(i) for i in range(len(self.pages))]
+
+    #     with gr.Blocks() as demo:
+    #         gr.Markdown(f"# {self.title}")
+    #         if self.author:
+    #             gr.Markdown(f"## by {self.author}")
+            
+    #         with gr.Row():
+    #             prompt = gr.Textbox(
+    #                 label="Illustration Prompt",
+    #                 placeholder="Select a page to edit its illustration..."
+    #             )
+    #             generate_btn = gr.Button("Generate", variant="primary")
+
+    #         gallery = gr.Gallery(
+    #             value=page_images,
+    #             columns=3,
+    #             height=500,
+    #             show_label=False
+    #         ).style(grid=3)
+
+    #         # Setup event handlers
+    #         gallery.select(update_prompt, None, prompt)
+    #         generate_btn.click(
+    #             generate_illustration,
+    #             inputs=[prompt],
+    #             outputs=[gallery],
+    #             _js="(prompt, evt) => [prompt, selected_index]",  # Pass gallery selection
+    #             preprocess=False
+    #         )
+
+    #     demo.launch()
