@@ -18,6 +18,7 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
 import gradio as gr
 from PIL import ImageDraw, ImageFont
+from huggingface_hub import InferenceClient
 
 class Book:
     """A class representing a children's book that can be exported to PowerPoint."""
@@ -53,13 +54,52 @@ class Book:
         while len(self.illustrations) < len(self.pages):
             self.illustrations.append(None)
 
-    def _get_prompt(self, text: str) -> str:
-        """Get the prompt for the given text using the LoRA model."""
+    def _get_illustration_prompt(self, text: str, client: InferenceClient) -> str:
+        """Get an illustration prompt from the text using Qwen."""
+        system_prompt = """You are a helpful assistant that converts children's book text into illustration prompts. 
+        Extract a key object along with its description that could be used to illustrate the page. 
+        Replace any proper names with more generic versions.
+        
+        For example:
+        If the text is: "Mustafa loves his silver cybertruck. One day, his cybertruck starts to glow, grow, and zoom up into the sky"
+        You should return: "A silver cybertruck zooming into the sky"
+        
+        If the text is: "Up, up, up goes Mustafa in his special cybertruck. He waves bye-bye to his house as it gets tiny down below"
+        You should return: "A boy in the sky waving bye"
+        """
+        
+        user_prompt = f"""This is the text of a page in a children's book. From this text, extract a key object along with its description that could be used to illustrate this page. Replace any proper names with more generic versions.
+
+Text: {text}
+
+Return ONLY the illustration description, nothing else."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+
+        stream = client.chat.completions.create(
+            model="Qwen/Qwen2.5-72B-Instruct",
+            messages=messages,
+            max_tokens=500,
+            stream=True
+        )
+
+        response = ""
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                response += chunk.choices[0].delta.content
+
+        return response.strip()
+
+    def _get_prompt(self, text: str, illustration_prompt: str) -> str:
+        """Get the final prompt for the given illustration prompt using the LoRA model."""
         if self.lora == "SebastianBodza/Flux_Aquarell_Watercolor_v2":
-            return f"A AQUACOLTOK watercolor painting with a white background to illustrate the following text in a children's book: {text}"
+            return f"A AQUACOLTOK watercolor painting with a white background of: {illustration_prompt}"
         else:
-            return f"An illustration of the following text in a children's book: {text}"
-    
+            return f"An illustration of: {illustration_prompt}"
+
     def export(self, filename: str | Path | None = None) -> None:
         """
         Export the book to a PowerPoint file.
@@ -88,37 +128,39 @@ class Book:
         border = slide.shapes.add_shape(
             MSO_SHAPE.RECTANGLE,
             Inches(0), Inches(0),
-            Inches(10), Inches(0.5)
+            Inches(0.2), Inches(7.5)
         )
         border.fill.solid()
         border.fill.fore_color.rgb = RGBColor(128, 0, 0)  # Maroon
         
         # Add title with adjusted positioning and z-order
         title = slide.shapes.title
-        title.top = Inches(1.0)  # Increased spacing from top
+        title.top = Inches(0)  # Increased spacing from top
         title.height = Inches(2.0)  # Increased height to accommodate two lines
+        title.width = Inches(10)
         
-        # Split title into first word and rest
-        title_parts = self.title.split(maxsplit=1)
-        first_word = title_parts[0]
-        rest_of_title = title_parts[1] if len(title_parts) > 1 else ""
-        
-        # Add first word
+        # Add title text
         p1 = title.text_frame.paragraphs[0]
-        p1.text = first_word
+        # Clear any existing text
+        p1.clear()
         p1.font.name = "Trebuchet MS"
-        p1.font.color.rgb = RGBColor(128, 0, 0)
-        p1.font.size = Inches(0.5)
         p1.alignment = PP_ALIGN.CENTER
         
-        # Add rest of title
-        if rest_of_title:
-            p2 = title.text_frame.add_paragraph()
-            p2.text = rest_of_title
-            p2.font.name = "Trebuchet MS"
-            p2.font.color.rgb = RGBColor(128, 0, 0)
-            p2.font.size = Inches(0.5)
-            p2.alignment = PP_ALIGN.CENTER
+        # Define common stop words
+        stop_words = {'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for',
+                     'from', 'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on',
+                     'that', 'the', 'to', 'was', 'were', 'will', 'with'}
+        
+        # Split title and add each word with appropriate size
+        words = self.title.split()
+        for i, word in enumerate(words):
+            run = p1.add_run()
+            run.text = word + (' ' if i < len(words) - 1 else '')
+            run.font.name = "Trebuchet MS"
+            if word.lower() in stop_words:
+                run.font.size = Inches(0.42)  # Smaller size for stop words
+            else:
+                run.font.size = Inches(0.5)   # Regular size for other words
         
         # Add title illustration if available
         if isinstance(self.title_illustration, str):
@@ -134,25 +176,21 @@ class Book:
         # Add author with adjusted positioning
         if self.author is not None:
             author_box = slide.shapes.add_textbox(
-                Inches(0), Inches(7.5),  # Moved up from bottom
+                Inches(0), Inches(6.5),  # Moved up from bottom
                 Inches(10), Inches(0.5)
             )
             author_frame = author_box.text_frame
             author_frame.text = f"Written by {self.author}"
             author_frame.paragraphs[0].alignment = PP_ALIGN.CENTER
             author_frame.paragraphs[0].font.name = "Trebuchet MS"
-            author_frame.paragraphs[0].font.size = Inches(0.2)
+            author_frame.paragraphs[0].font.size = Inches(0.25)
         
         # Add content slides
         content_slide_layout = prs.slide_layouts[5]  # Blank layout
         
         for page_num, (text, illustration) in enumerate(zip(self.pages, self.illustrations)):
             slide = prs.slides.add_slide(content_slide_layout)
-            
-            # Determine if text should be above or below illustration
-            text_on_top = page_num % 2 == 0
-            text_y = Inches(0.5) if text_on_top else Inches(4.5)
-            illustration_y = Inches(2) if text_on_top else Inches(0.5)
+            illustration_y = Inches(2)
             
             # Split text into sentences and join with newlines
             sentences = text.replace('. ', '.\n').split('\n')
@@ -164,19 +202,21 @@ class Book:
                 first_sentence_rest = sentences[0][1:]
                 
                 p = slide.shapes.title.text_frame.paragraphs[0]
+                p.line_spacing = 1.5  # Add line spacing
                 run = p.add_run()
                 run.text = first_char
-                run.font.size = Inches(0.3)  # Make first letter larger
+                run.font.size = Inches(0.3)
                 run.font.name = "Trebuchet MS"
                 
                 run = p.add_run()
                 run.text = first_sentence_rest
-                run.font.size = Inches(0.25)  # Regular text size
+                run.font.size = Inches(0.25)
                 run.font.name = "Trebuchet MS"
                 
                 # Add remaining sentences as new paragraphs
                 for sentence in sentences[1:]:
                     p = slide.shapes.title.text_frame.add_paragraph()
+                    p.line_spacing = 1.5  # Add line spacing
                     p.text = sentence
                     p.font.name = "Trebuchet MS"
                     p.font.size = Inches(0.25)
@@ -190,6 +230,7 @@ class Book:
                         first_paragraph = False
                     else:
                         p = slide.shapes.title.text_frame.add_paragraph()
+                    p.line_spacing = 1.5  # Add line spacing
                     p.text = sentence
                     p.font.name = "Trebuchet MS"
                     p.font.size = Inches(0.25)
@@ -239,6 +280,9 @@ class Book:
         if not token:
             warnings.warn("No Hugging Face token found. Please login using `huggingface-cli login` or set the HF_TOKEN environment variable. Otherwise, you may be rate limited.")
 
+        # Initialize the Inference Client
+        client = InferenceClient(token=token)
+
         API_URL = f"https://api-inference.huggingface.co/models/{self.lora}"
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -264,9 +308,19 @@ class Book:
                 continue
                 
             try:
-                # Query the API
-                prompt = self._get_prompt(text)
+                print(f"\n=== Processing {task_name} ===")
+                print(f"Original text: {text}")
+                
+                # First get the illustration prompt from Qwen
+                illustration_prompt = self._get_illustration_prompt(text, client)
+                print(f"Qwen prompt: {illustration_prompt}")
+                
+                # Then get the final prompt and query the image API
+                prompt = self._get_prompt(text, illustration_prompt)
+                print(f"Final image prompt: {prompt}")
+                
                 response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+                
                 if response.status_code != 200:
                     print(f"Warning: Failed to generate illustration for {task_name}: {response.text}")
                     continue
@@ -275,6 +329,7 @@ class Book:
                 image = Image.open(io.BytesIO(response.content))
                 image_path = save_dir / f"{task_name}.png"
                 image.save(image_path)
+                print(f"Image saved to: {image_path}")
                 
                 # Update the appropriate illustration reference
                 if task_name == "title":
@@ -287,123 +342,5 @@ class Book:
                 print(f"Warning: Error generating illustration for {task_name}: {e}")
                 continue
 
-        print(f"Illustrations saved to: {save_dir}")
+        print(f"\nAll illustrations saved to: {save_dir}")
 
-    def _create_page_image(self, page_num: int) -> Image.Image:
-        """Create a PIL Image representation of a book page."""
-        # Create a white background image (same aspect ratio as PPT slide)
-        img = Image.new('RGB', (1000, 750), 'white')
-        draw = ImageDraw.Draw(img)
-        
-        # Try to load a basic font
-        try:
-            font = ImageFont.truetype("Arial.ttf", 36)
-            small_font = ImageFont.truetype("Arial.ttf", 24)
-        except:
-            font = ImageFont.load_default()
-            small_font = ImageFont.load_default()
-
-        text = self.pages[page_num]
-        illustration = self.illustrations[page_num]
-        
-        # Determine text position (alternating top/bottom like in export())
-        text_on_top = page_num % 2 == 0
-        text_y = 50 if text_on_top else 450
-        illustration_y = 200 if text_on_top else 50
-
-        # Split text into sentences and calculate total height
-        sentences = text.replace('. ', '.\n').split('\n')
-        line_height = 40  # Adjust as needed
-        
-        # Draw each sentence on a new line
-        for i, sentence in enumerate(sentences):
-            text_bbox = draw.textbbox((0, 0), sentence, font=font)
-            text_width = text_bbox[2] - text_bbox[0]
-            text_x = (1000 - text_width) // 2  # Center text
-            current_y = text_y + (i * line_height)
-            draw.text((text_x, current_y), sentence, fill='black', font=font)
-
-        # Add illustration if available
-        if isinstance(illustration, str):
-            try:
-                illust = Image.open(illustration)
-                illust = illust.resize((800, 400), Image.Resampling.LANCZOS)
-                img.paste(illust, (100, illustration_y))
-            except Exception as e:
-                draw.text((100, illustration_y), f"Illustration error: {e}", fill='red', font=small_font)
-
-        # Add page number
-        page_num_text = str(page_num + 1)
-        draw.text((500, 700), page_num_text, fill='black', font=small_font, anchor="mm")
-
-        return img
-
-    # def preview(self):
-    #     """Launch a Gradio interface for previewing and editing the book."""
-    #     def update_prompt(evt: gr.SelectData) -> str:
-    #         """Update prompt when gallery image is selected."""
-    #         page_num = evt.index
-    #         return self._get_prompt(self.pages[page_num])
-        
-    #     def generate_illustration(prompt: str, evt: gr.SelectData) -> list:
-    #         """Generate new illustration for selected page."""
-    #         page_num = evt.index
-            
-    #         # Get HF token and setup API
-    #         token = huggingface_hub.get_token()
-    #         API_URL = f"https://api-inference.huggingface.co/models/{self.lora}"
-    #         headers = {"Authorization": f"Bearer {token}"}
-            
-    #         try:
-    #             # Generate new illustration
-    #             response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
-    #             if response.status_code == 200:
-    #                 # Save the image to a temporary file
-    #                 image = Image.open(io.BytesIO(response.content))
-    #                 temp_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
-    #                 image.save(temp_file.name)
-                    
-    #                 # Update the book's illustration
-    #                 self.illustrations[page_num] = temp_file.name
-                    
-    #                 # Regenerate all page images
-    #                 return [self._create_page_image(i) for i in range(len(self.pages))]
-    #             else:
-    #                 raise Exception(f"API returned status code {response.status_code}")
-    #         except Exception as e:
-    #             print(f"Error generating illustration: {e}")
-    #             return None
-
-    #     # Create initial page images
-    #     page_images = [self._create_page_image(i) for i in range(len(self.pages))]
-
-    #     with gr.Blocks() as demo:
-    #         gr.Markdown(f"# {self.title}")
-    #         if self.author:
-    #             gr.Markdown(f"## by {self.author}")
-            
-    #         with gr.Row():
-    #             prompt = gr.Textbox(
-    #                 label="Illustration Prompt",
-    #                 placeholder="Select a page to edit its illustration..."
-    #             )
-    #             generate_btn = gr.Button("Generate", variant="primary")
-
-    #         gallery = gr.Gallery(
-    #             value=page_images,
-    #             columns=3,
-    #             height=500,
-    #             show_label=False
-    #         ).style(grid=3)
-
-    #         # Setup event handlers
-    #         gallery.select(update_prompt, None, prompt)
-    #         generate_btn.click(
-    #             generate_illustration,
-    #             inputs=[prompt],
-    #             outputs=[gallery],
-    #             _js="(prompt, evt) => [prompt, selected_index]",  # Pass gallery selection
-    #             preprocess=False
-    #         )
-
-    #     demo.launch()
