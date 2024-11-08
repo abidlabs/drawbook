@@ -28,7 +28,9 @@ class Book:
         title_illustration: str | Literal[False] | None = None,
         illustrations: List[str | None | Literal[False]] = None,
         lora: str = "SebastianBodza/Flux_Aquarell_Watercolor_v2",
-        author: str | None = None
+        author: str | None = None,
+        illustration_prompts: List[str | None] = None,
+        title_illustration_prompt: str | None = None
     ):
         """
         Initialize a new Book.
@@ -40,6 +42,8 @@ class Book:
                          (str for path, None for pending, False for no illustration)
             lora: The LoRA model on Hugging Face to use for illustrations
             author: The book's author name
+            illustration_prompts: Optional list of custom prompts for page illustrations
+            title_illustration_prompt: Optional custom prompt for title illustration
         """
         self.title = title
         self.pages = pages or []
@@ -47,12 +51,20 @@ class Book:
         self.lora = lora
         self.title_illustration = title_illustration
         self.author = author
+        self.illustration_prompts = illustration_prompts or []
+        self.title_illustration_prompt = title_illustration_prompt
+        self.client = InferenceClient()
         
         # Ensure illustrations list matches pages length
         while len(self.illustrations) < len(self.pages):
             self.illustrations.append(None)
+        
+        # Ensure illustration_prompts list matches pages length
+        while len(self.illustration_prompts) < len(self.pages):
+            self.illustration_prompts.append(None)
+            
 
-    def _get_illustration_prompt(self, text: str, client: InferenceClient) -> str:
+    def _get_illustration_prompt(self, text: str) -> str:
         """Get an illustration prompt from the text using Qwen."""
         system_prompt = """You are a helpful assistant that converts children's book text into illustration prompts. 
         Extract a key object along with its description that could be used to illustrate the page. 
@@ -77,7 +89,7 @@ Return ONLY the illustration description, nothing else."""
             {"role": "user", "content": user_prompt}
         ]
 
-        stream = client.chat.completions.create(
+        stream = self.client.chat.completions.create(
             model="Qwen/Qwen2.5-72B-Instruct",
             messages=messages,
             max_tokens=500,
@@ -91,11 +103,15 @@ Return ONLY the illustration description, nothing else."""
 
         return response.strip()
 
-    def _get_prompt(self, text: str, illustration_prompt: str) -> str:
-        """Get the final prompt for the given illustration prompt using the LoRA model."""
+    def _get_prompt(self, illustration_prompt: str) -> str:
         if self.lora == "SebastianBodza/Flux_Aquarell_Watercolor_v2":
             return f"A AQUACOLTOK watercolor painting with a white background of: {illustration_prompt}"
         else:
+            warnings.warn(
+                f"The LoRA model '{self.lora}' is not officially supported. "
+                "Results may not be as expected.",
+                UserWarning
+            )
             return f"An illustration of: {illustration_prompt}"
 
     def export(self, filename: str | Path | None = None) -> None:
@@ -271,13 +287,9 @@ Return ONLY the illustration description, nothing else."""
             save_dir: Optional directory to save the generated images. 
                      If None, creates a temporary directory.
         """
-        # Get HF token
         token = huggingface_hub.get_token()
         if not token:
             warnings.warn("No Hugging Face token found. Please login using `huggingface-cli login` or set the HF_TOKEN environment variable. Otherwise, you may be rate limited.")
-
-        # Initialize the Inference Client
-        client = InferenceClient(token=token)
 
         API_URL = f"https://api-inference.huggingface.co/models/{self.lora}"
         headers = {"Authorization": f"Bearer {token}"}
@@ -307,12 +319,22 @@ Return ONLY the illustration description, nothing else."""
                 print(f"\n=== Processing {task_name} ===")
                 print(f"Original text: {text}")
                 
-                # First get the illustration prompt from Qwen
-                illustration_prompt = self._get_illustration_prompt(text, client)
-                print(f"Qwen prompt: {illustration_prompt}")
+                # Use custom prompt if available, otherwise get from Qwen
+                if task_name == "title" and self.title_illustration_prompt:
+                    illustration_prompt = self.title_illustration_prompt
+                elif task_name != "title":
+                    page_num = int(task_name.split('_')[1]) - 1
+                    if self.illustration_prompts[page_num]:
+                        illustration_prompt = self.illustration_prompts[page_num]
+                    else:
+                        illustration_prompt = self._get_illustration_prompt(text)
+                else:
+                    illustration_prompt = self._get_illustration_prompt(text)
+                    
+                print(f"Illustration prompt: {illustration_prompt}")
                 
                 # Then get the final prompt and query the image API
-                prompt = self._get_prompt(text, illustration_prompt)
+                prompt = self._get_prompt(illustration_prompt)
                 print(f"Final image prompt: {prompt}")
                 
                 response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
