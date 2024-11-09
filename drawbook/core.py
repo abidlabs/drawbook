@@ -3,7 +3,7 @@ Core functionality for the drawbook library.
 """
 
 from pathlib import Path
-from typing import List, Literal, Dict, Any, Optional
+from typing import List, Literal
 import tempfile
 import io
 import requests
@@ -17,7 +17,7 @@ from pptx.enum.text import PP_ALIGN
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
 from huggingface_hub import InferenceClient
-from PIL import Image, ImageDraw, ImageFont
+from PIL import ImageDraw, ImageFont
 import gradio as gr
 import textwrap
 import json
@@ -618,29 +618,14 @@ Return ONLY the illustration description, nothing else."""
                         index,
                     )
 
-            def generate_prompt_page(selected_page: int, page_text: str):
-                illustration_prompt = self._get_illustration_prompt(page_text)
-                if selected_page == 0:
-                    self.title = page_text
-                    self.title_illustration_prompt = illustration_prompt
-                else:
-                    self.pages[selected_page - 1] = page_text
-                    self.illustration_prompts[selected_page - 1] = illustration_prompt
-                return illustration_prompt
-
-            def generate_illustration_page(selected_page: int):
-                self.illustrate(page_num=selected_page)
-                self.create_preview(page_num=selected_page)
-                return self.page_previews
-
             def export_book():
                 output_path = self.export()
-                return gr.DownloadButton(output_path, interactive=True)
+                return gr.DownloadButton(value=output_path, interactive=True)
 
             gr.Markdown(f"<center><h1>{self.title}</h1></center>")
             with gr.Row():
                 with gr.Column():
-                    page = gr.Textbox(self.title, label="Page text", lines=3)
+                    page = gr.Textbox(self.title, label="Page text", lines=3, interactive=False)
                     prompt = gr.Textbox(
                         self.title_illustration_prompt,
                         label="Illustration prompt",
@@ -666,6 +651,27 @@ Return ONLY the illustration description, nothing else."""
                             label="Download", variant="primary", interactive=False
                         )
 
+            def generate_prompt_page(selected_page: int, page_text: str):
+                yield {prompt_button: gr.Button("Generating...", interactive=False)}
+                illustration_prompt = self._get_illustration_prompt(page_text)
+                if selected_page == 0:
+                    self.title = page_text
+                    self.title_illustration_prompt = illustration_prompt
+                else:
+                    self.pages[selected_page - 1] = page_text
+                    self.illustration_prompts[selected_page - 1] = illustration_prompt
+                yield {prompt_button: gr.Button("Generate Prompt", interactive=True), prompt: illustration_prompt}
+
+            def generate_illustration_page(selected_page: int, page_text: str, illustration_prompt: str):
+                yield {image_button: gr.Button("Generating...", interactive=False)}
+                if not illustration_prompt:
+                    illustration_prompt = self._get_illustration_prompt(page_text)
+                    yield {prompt: illustration_prompt}
+                self.illustrate(page_num=selected_page)
+                self.create_preview(page_num=selected_page)
+                print("self.page_previews", self.page_previews)
+                yield {gallery: self.page_previews, image_button: gr.Button("Generate Image", interactive=True)}
+
             gallery.select(
                 select_page,
                 outputs=[page, prompt, selected_page],
@@ -674,13 +680,14 @@ Return ONLY the illustration description, nothing else."""
             prompt_button.click(
                 fn=generate_prompt_page,
                 inputs=[selected_page, page],
-                outputs=[prompt],
+                outputs=[prompt_button, prompt],
                 show_progress="minimal",
             )
             image_button.click(
                 fn=generate_illustration_page,
-                inputs=[selected_page],
-                outputs=[gallery],
+                inputs=[selected_page, page, prompt],
+                outputs=[image_button, gallery, prompt],
+                show_progress="minimal",
             )
             export_button.click(
                 fn=export_book,
