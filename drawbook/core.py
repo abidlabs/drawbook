@@ -498,13 +498,20 @@ Return ONLY the illustration description, nothing else."""
             pages.append(page)
         
         # Launch Gradio interface
-        with gr.Blocks() as preview_interface:
-            gr.Gallery(
-                value=pages,
-                columns=2,
-                rows=2,
-                height=600
-            )
+        with gr.Blocks(theme="citrus") as preview_interface:
+            gr.Markdown(f"<center><h1>{self.title}</h1></center>")
+            with gr.Row():
+                with gr.Column():
+                    gr.Textbox(label="Page text", lines=3)
+                    gr.Textbox(label="Illustration prompt", lines=3)
+                with gr.Column():
+                    gr.Gallery(
+                    value=pages,
+                    columns=2,
+                    rows=2,
+                    height=600,
+                    show_label=False
+                )
         
         preview_interface.launch()
 
