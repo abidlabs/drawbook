@@ -316,7 +316,9 @@ Return ONLY the illustration description, nothing else."""
         """Return the number of pages in the book."""
         return len(self.pages)
 
-    def illustrate(self, save_dir: str | Path | None = None, page_num: int | None = None) -> str | None:
+    def illustrate(
+        self, save_dir: str | Path | None = None, page_num: int | None = None
+    ) -> str | None:
         """
         Generate illustrations using the Hugging Face Inference API.
 
@@ -352,7 +354,13 @@ Return ONLY the illustration description, nothing else."""
                 tasks = [("title", self.title, self.title_illustration)]
             else:
                 page_idx = page_num - 1
-                tasks = [(f"page_{page_num}", self.pages[page_idx], self.illustrations[page_idx])]
+                tasks = [
+                    (
+                        f"page_{page_num}",
+                        self.pages[page_idx],
+                        self.illustrations[page_idx],
+                    )
+                ]
         else:
             print("Generating illustrations... This could take a few minutes.")
             tasks = []
@@ -360,10 +368,14 @@ Return ONLY the illustration description, nothing else."""
                 tasks.append(("title", self.title, None))
             tasks.extend(
                 (f"page_{i+1}", text, current_illust)
-                for i, (text, current_illust) in enumerate(zip(self.pages, self.illustrations))
+                for i, (text, current_illust) in enumerate(
+                    zip(self.pages, self.illustrations)
+                )
             )
 
-        for task_name, text, current_illust in tqdm(tasks, desc="Generating illustrations", disable=page_num is not None):
+        for task_name, text, current_illust in tqdm(
+            tasks, desc="Generating illustrations", disable=page_num is not None
+        ):
             # Skip if illustration already exists or is explicitly disabled
             if isinstance(current_illust, str) or current_illust is False:
                 continue
@@ -375,23 +387,33 @@ Return ONLY the illustration description, nothing else."""
 
                 if task_name == "title":
                     if not self.title_illustration_prompt:
-                        self.title_illustration_prompt = self._get_illustration_prompt(text)
+                        self.title_illustration_prompt = self._get_illustration_prompt(
+                            text
+                        )
                     if page_num is None:
-                        print(f"Title illustration prompt: {self.title_illustration_prompt}")
+                        print(
+                            f"Title illustration prompt: {self.title_illustration_prompt}"
+                        )
                     prompt = self._get_prompt(self.title_illustration_prompt)
                     if page_num is None:
                         print(f"Final title image prompt: {prompt}")
                 else:
                     page_idx = int(task_name.split("_")[1]) - 1
                     if not self.illustration_prompts[page_idx]:
-                        self.illustration_prompts[page_idx] = self._get_illustration_prompt(text)
+                        self.illustration_prompts[page_idx] = (
+                            self._get_illustration_prompt(text)
+                        )
                     if page_num is None:
-                        print(f"Illustration prompt: {self.illustration_prompts[page_idx]}")
+                        print(
+                            f"Illustration prompt: {self.illustration_prompts[page_idx]}"
+                        )
                     prompt = self._get_prompt(self.illustration_prompts[page_idx])
                     if page_num is None:
                         print(f"Final image prompt: {prompt}")
 
-                response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
+                response = requests.post(
+                    API_URL, headers=headers, json={"inputs": prompt}
+                )
 
                 if response.status_code != 200:
                     msg = f"Failed to generate illustration for {task_name}: {response.text}"
@@ -570,7 +592,7 @@ Return ONLY the illustration description, nothing else."""
             def generate_illustration_page(selected_page: int):
                 self.illustrate(page_num=selected_page)
                 return self.pages
-            
+
             def export_book():
                 output_path = self.export()
                 return gr.DownloadButton(output_path, interactive=True)
