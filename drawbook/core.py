@@ -59,6 +59,7 @@ class Book:
         self.illustration_prompts = illustration_prompts or []
         self.title_illustration_prompt = title_illustration_prompt
         self.client = InferenceClient()
+        self.page_previews = []
 
         # Ensure illustrations list matches pages length
         while len(self.illustrations) < len(self.pages):
@@ -448,19 +449,21 @@ Return ONLY the illustration description, nothing else."""
         else:
             return "Illustration generated successfully!"
 
-    def preview(self) -> None:
+    def create_preview(self, page_num: int | None = None):
         """
-        Create a visual preview of the book pages and display them in a Gradio interface.
-        """
-        print("Creating preview...")
+        Create visual previews of book pages.
 
+        Args:
+            page_num: Optional specific page to preview (0 for title page, 1+ for content pages).
+                     If None, creates previews for all pages.
+        """
         # Constants for page layout (matching PowerPoint dimensions and positioning)
-        PAGE_WIDTH = 1920  # roughly equivalent to PowerPoint slide width
-        PAGE_HEIGHT = 1080  # roughly equivalent to PowerPoint slide height
-        ILLUSTRATION_WIDTH = 960  # equivalent to 5 inches in PowerPoint
+        PAGE_WIDTH = 1920
+        PAGE_HEIGHT = 1080
+        ILLUSTRATION_WIDTH = 960
         ILLUSTRATION_HEIGHT = 960
         ILLUSTRATION_X = (PAGE_WIDTH - ILLUSTRATION_WIDTH) // 2
-        ILLUSTRATION_Y = 270  # equivalent to 1.4 inches from top
+        ILLUSTRATION_Y = 270
 
         # Try to load Trebuchet MS font, fall back to Arial if not available
         try:
@@ -474,95 +477,131 @@ Return ONLY the illustration description, nothing else."""
             page_num_font = ImageFont.truetype("Arial", 29)
             author_font = ImageFont.truetype("Arial", 48)
 
-        pages = []
-
-        # Create title page
-        title_page = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), "white")
-        draw = ImageDraw.Draw(title_page)
-
-        # Add maroon border on left
-        draw.rectangle([(0, 0), (38, PAGE_HEIGHT)], fill=(128, 0, 0))
-
-        # Add title illustration if available
-        if isinstance(self.title_illustration, str):
-            try:
-                illust = Image.open(self.title_illustration)
-                illust = illust.resize((ILLUSTRATION_WIDTH, ILLUSTRATION_HEIGHT))
-                title_page.paste(illust, (ILLUSTRATION_X, ILLUSTRATION_Y))
-            except Exception as e:
-                print(f"Warning: Could not add title illustration: {e}")
-
-        # Add title text
-        words = self.title.split()
-        title_y = 0
-        title_text = " ".join(words)
-        bbox = draw.textbbox((0, 0), title_text, font=title_font)
-        title_width = bbox[2] - bbox[0]
-        draw.text(
-            ((PAGE_WIDTH - title_width) // 2, title_y),
-            title_text,
-            font=title_font,
-            fill="black",
-        )
-
-        # Add author if available
-        if self.author:
-            author_text = f"Written by {self.author}"
-            bbox = draw.textbbox((0, 0), author_text, font=author_font)
-            author_width = bbox[2] - bbox[0]
-            draw.text(
-                ((PAGE_WIDTH - author_width) // 2, PAGE_HEIGHT - 100),
-                author_text,
-                font=author_font,
-                fill="black",
+        # Determine which pages to process
+        if page_num is not None:
+            if page_num == 0:
+                pages_to_process = [(0, "title", None, None)]
+            else:
+                page_idx = page_num - 1
+                pages_to_process = [
+                    (
+                        page_num,
+                        "content",
+                        self.pages[page_idx],
+                        self.illustrations[page_idx],
+                    )
+                ]
+        else:
+            # Process all pages
+            pages_to_process = [(0, "title", None, None)]  # Title page
+            pages_to_process.extend(
+                (i + 1, "content", text, illust)
+                for i, (text, illust) in enumerate(zip(self.pages, self.illustrations))
             )
 
-        pages.append(title_page)
+        # Process each page
+        for page_num, page_type, text, illustration in pages_to_process:
+            if page_type == "title":
+                # Create title page
+                page = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), "white")
+                draw = ImageDraw.Draw(page)
 
-        # Create content pages
-        for page_num, (text, illustration) in enumerate(
-            zip(self.pages, self.illustrations)
-        ):
-            page = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), "white")
-            draw = ImageDraw.Draw(page)
+                # Add maroon border on left
+                draw.rectangle([(0, 0), (38, PAGE_HEIGHT)], fill=(128, 0, 0))
 
-            # Add illustration if available
-            if isinstance(illustration, str):
-                try:
-                    illust = Image.open(illustration)
-                    illust = illust.resize((ILLUSTRATION_WIDTH, ILLUSTRATION_HEIGHT))
-                    page.paste(illust, (ILLUSTRATION_X, ILLUSTRATION_Y))
-                except Exception as e:
-                    print(
-                        f"Warning: Could not add illustration on page {page_num + 1}: {e}"
+                # Add title illustration if available
+                if isinstance(self.title_illustration, str):
+                    try:
+                        illust = Image.open(self.title_illustration)
+                        illust = illust.resize(
+                            (ILLUSTRATION_WIDTH, ILLUSTRATION_HEIGHT)
+                        )
+                        page.paste(illust, (ILLUSTRATION_X, ILLUSTRATION_Y))
+                    except Exception as e:
+                        print(f"Warning: Could not add title illustration: {e}")
+
+                # Add title text
+                title_y = 0
+                bbox = draw.textbbox((0, 0), self.title, font=title_font)
+                title_width = bbox[2] - bbox[0]
+                draw.text(
+                    ((PAGE_WIDTH - title_width) // 2, title_y),
+                    self.title,
+                    font=title_font,
+                    fill="black",
+                )
+
+                # Add author if available
+                if self.author:
+                    author_text = f"Written by {self.author}"
+                    bbox = draw.textbbox((0, 0), author_text, font=author_font)
+                    author_width = bbox[2] - bbox[0]
+                    draw.text(
+                        ((PAGE_WIDTH - author_width) // 2, PAGE_HEIGHT - 100),
+                        author_text,
+                        font=author_font,
+                        fill="black",
                     )
 
-            # Add text
-            text_y = 50  # Start text from top
-            wrapped_text = textwrap.fill(text, width=50)  # Wrap text at 50 characters
+            else:
+                # Create content page
+                page = Image.new("RGB", (PAGE_WIDTH, PAGE_HEIGHT), "white")
+                draw = ImageDraw.Draw(page)
 
-            bbox = draw.textbbox((0, 0), wrapped_text, font=body_font)
-            text_width = bbox[2] - bbox[0]
-            draw.text(
-                ((PAGE_WIDTH - text_width) // 2, text_y),
-                wrapped_text,
-                font=body_font,
-                fill="black",
-                align="center",
-            )
+                # Add illustration if available
+                if isinstance(illustration, str):
+                    try:
+                        illust = Image.open(illustration)
+                        illust = illust.resize(
+                            (ILLUSTRATION_WIDTH, ILLUSTRATION_HEIGHT)
+                        )
+                        page.paste(illust, (ILLUSTRATION_X, ILLUSTRATION_Y))
+                    except Exception as e:
+                        print(
+                            f"Warning: Could not add illustration on page {page_num}: {e}"
+                        )
 
-            # Add page number
-            page_num_text = str(page_num + 1)
-            bbox = draw.textbbox((0, 0), page_num_text, font=page_num_font)
-            page_num_width = bbox[2] - bbox[0]
-            draw.text(
-                ((PAGE_WIDTH - page_num_width) // 2, PAGE_HEIGHT - 100),
-                page_num_text,
-                font=page_num_font,
-                fill="black",
-            )
+                # Add text
+                text_y = 50
+                wrapped_text = textwrap.fill(text, width=50)
+                bbox = draw.textbbox((0, 0), wrapped_text, font=body_font)
+                text_width = bbox[2] - bbox[0]
+                draw.text(
+                    ((PAGE_WIDTH - text_width) // 2, text_y),
+                    wrapped_text,
+                    font=body_font,
+                    fill="black",
+                    align="center",
+                )
 
-            pages.append(page)
+                # Add page number
+                page_num_text = str(page_num)
+                bbox = draw.textbbox((0, 0), page_num_text, font=page_num_font)
+                page_num_width = bbox[2] - bbox[0]
+                draw.text(
+                    ((PAGE_WIDTH - page_num_width) // 2, PAGE_HEIGHT - 100),
+                    page_num_text,
+                    font=page_num_font,
+                    fill="black",
+                )
+
+            # Update the preview pages
+            if page_num is None:
+                self.page_previews.append(page)
+            else:
+                # Ensure list is long enough
+                while len(self.page_previews) <= page_num:
+                    self.page_previews.append(None)
+                self.page_previews[page_num] = page
+
+        return self.page_previews if page_num is None else self.page_previews[page_num]
+
+    def preview(self) -> None:
+        """
+        Create a visual preview of the book pages and display them in a Gradio interface.
+        """
+        print("Creating preview...")
+        self.create_preview()
 
         # Launch Gradio interface
         with gr.Blocks(theme="citrus") as preview_interface:
@@ -591,7 +630,8 @@ Return ONLY the illustration description, nothing else."""
 
             def generate_illustration_page(selected_page: int):
                 self.illustrate(page_num=selected_page)
-                return self.pages
+                self.create_preview(page_num=selected_page)
+                return self.page_previews
 
             def export_book():
                 output_path = self.export()
@@ -613,7 +653,7 @@ Return ONLY the illustration description, nothing else."""
                         image_button = gr.Button("Generate Image", variant="primary")
                 with gr.Column():
                     gallery = gr.Gallery(
-                        value=pages,
+                        value=self.page_previews,
                         columns=2,
                         rows=2,
                         height=600,
@@ -641,7 +681,6 @@ Return ONLY the illustration description, nothing else."""
                 fn=generate_illustration_page,
                 inputs=[selected_page],
                 outputs=[gallery],
-                show_progress="minimal",
             )
             export_button.click(
                 fn=export_book,
