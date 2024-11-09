@@ -17,6 +17,9 @@ from pptx.enum.text import PP_ALIGN
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
 from huggingface_hub import InferenceClient
+from PIL import Image, ImageDraw, ImageFont
+import gradio as gr
+import textwrap
 
 class Book:
     """A class representing a children's book that can be exported to PowerPoint."""
@@ -361,4 +364,147 @@ Return ONLY the illustration description, nothing else."""
                 continue
 
         print(f"\nAll illustrations saved to: {save_dir}")
+
+    def preview(self) -> None:
+        """
+        Create a visual preview of the book pages and display them in a Gradio interface.
+        """
+        print("Creating preview...")
+        
+        # Constants for page layout (matching PowerPoint dimensions and positioning)
+        PAGE_WIDTH = 1920  # roughly equivalent to PowerPoint slide width
+        PAGE_HEIGHT = 1080  # roughly equivalent to PowerPoint slide height
+        ILLUSTRATION_WIDTH = 960  # equivalent to 5 inches in PowerPoint
+        ILLUSTRATION_HEIGHT = 960
+        ILLUSTRATION_X = (PAGE_WIDTH - ILLUSTRATION_WIDTH) // 2
+        ILLUSTRATION_Y = 270  # equivalent to 1.4 inches from top
+        
+        # Try to load Trebuchet MS font, fall back to Arial if not available
+        try:
+            title_font = ImageFont.truetype("Trebuchet MS", 96)
+            body_font = ImageFont.truetype("Trebuchet MS", 48)
+            page_num_font = ImageFont.truetype("Trebuchet MS", 29)
+            author_font = ImageFont.truetype("Trebuchet MS", 48)
+        except OSError:
+            title_font = ImageFont.truetype("Arial", 96)
+            body_font = ImageFont.truetype("Arial", 48)
+            page_num_font = ImageFont.truetype("Arial", 29)
+            author_font = ImageFont.truetype("Arial", 48)
+        
+        pages = []
+        
+        # Create title page
+        title_page = Image.new('RGB', (PAGE_WIDTH, PAGE_HEIGHT), 'white')
+        draw = ImageDraw.Draw(title_page)
+        
+        # Add maroon border on left
+        draw.rectangle([(0, 0), (38, PAGE_HEIGHT)], fill=(128, 0, 0))
+        
+        # Add title illustration if available
+        if isinstance(self.title_illustration, str):
+            try:
+                illust = Image.open(self.title_illustration)
+                illust = illust.resize((ILLUSTRATION_WIDTH, ILLUSTRATION_HEIGHT))
+                title_page.paste(illust, (ILLUSTRATION_X, ILLUSTRATION_Y))
+            except Exception as e:
+                print(f"Warning: Could not add title illustration: {e}")
+        
+        # Add title text
+        words = self.title.split()
+        title_y = 0
+        title_text = " ".join(words)
+        bbox = draw.textbbox((0, 0), title_text, font=title_font)
+        title_width = bbox[2] - bbox[0]
+        draw.text(
+            ((PAGE_WIDTH - title_width) // 2, title_y),
+            title_text,
+            font=title_font,
+            fill='black'
+        )
+        
+        # Add author if available
+        if self.author:
+            author_text = f"Written by {self.author}"
+            bbox = draw.textbbox((0, 0), author_text, font=author_font)
+            author_width = bbox[2] - bbox[0]
+            draw.text(
+                ((PAGE_WIDTH - author_width) // 2, PAGE_HEIGHT - 100),
+                author_text,
+                font=author_font,
+                fill='black'
+            )
+        
+        pages.append(title_page)
+        
+        # Create content pages
+        for page_num, (text, illustration) in enumerate(zip(self.pages, self.illustrations)):
+            page = Image.new('RGB', (PAGE_WIDTH, PAGE_HEIGHT), 'white')
+            draw = ImageDraw.Draw(page)
+            
+            # Add illustration if available
+            if isinstance(illustration, str):
+                try:
+                    illust = Image.open(illustration)
+                    illust = illust.resize((ILLUSTRATION_WIDTH, ILLUSTRATION_HEIGHT))
+                    page.paste(illust, (ILLUSTRATION_X, ILLUSTRATION_Y))
+                except Exception as e:
+                    print(f"Warning: Could not add illustration on page {page_num + 1}: {e}")
+            
+            # Add text
+            text_y = 50  # Start text from top
+            wrapped_text = textwrap.fill(text, width=50)  # Wrap text at 50 characters
+            
+            # Special formatting for first page
+            if page_num == 0:
+                first_char = wrapped_text[0]
+                rest_text = wrapped_text[1:]
+                
+                # Draw first character larger
+                draw.text((PAGE_WIDTH//2 - 100, text_y), first_char, font=title_font, fill='black')
+                
+                # Draw rest of text
+                bbox = draw.textbbox((0, 0), rest_text, font=body_font)
+                text_width = bbox[2] - bbox[0]
+                draw.text(
+                    ((PAGE_WIDTH - text_width) // 2, text_y + 100),
+                    rest_text,
+                    font=body_font,
+                    fill='black',
+                    align='center'
+                )
+            else:
+                # Draw regular text
+                bbox = draw.textbbox((0, 0), wrapped_text, font=body_font)
+                text_width = bbox[2] - bbox[0]
+                draw.text(
+                    ((PAGE_WIDTH - text_width) // 2, text_y),
+                    wrapped_text,
+                    font=body_font,
+                    fill='black',
+                    align='center'
+                )
+            
+            # Add page number
+            page_num_text = str(page_num + 1)
+            bbox = draw.textbbox((0, 0), page_num_text, font=page_num_font)
+            page_num_width = bbox[2] - bbox[0]
+            draw.text(
+                ((PAGE_WIDTH - page_num_width) // 2, PAGE_HEIGHT - 100),
+                page_num_text,
+                font=page_num_font,
+                fill='black'
+            )
+            
+            pages.append(page)
+        
+        # Launch Gradio interface
+        with gr.Blocks() as preview_interface:
+            gr.Gallery(
+                value=pages,
+                columns=2,
+                rows=2,
+                height=600
+            )
+        
+        preview_interface.launch()
 
