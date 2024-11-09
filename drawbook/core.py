@@ -310,24 +310,31 @@ Return ONLY the illustration description, nothing else."""
         # Save the presentation
         prs.save(str(output_path))
         print(f"Book exported to: {output_path.absolute()}")
+        return output_path.absolute()
 
     def __len__(self) -> int:
         """Return the number of pages in the book."""
         return len(self.pages)
 
-    def illustrate(self, save_dir: str | Path | None = None) -> None:
+    def illustrate(self, save_dir: str | Path | None = None, page_num: int | None = None) -> str | None:
         """
-        Generate illustrations for all pages using the Hugging Face Inference API.
+        Generate illustrations using the Hugging Face Inference API.
 
         Args:
             save_dir: Optional directory to save the generated images.
                      If None, creates a temporary directory.
+            page_num: Optional specific page to illustrate (0 for title page, 1+ for content pages).
+                     If None, illustrates all pages.
+
+        Returns:
+            Status message if page_num is specified, None otherwise.
         """
         token = huggingface_hub.get_token()
         if not token:
-            warnings.warn(
-                "No Hugging Face token found. Please login using `huggingface-cli login` or set the HF_TOKEN environment variable. Otherwise, you may be rate limited."
-            )
+            msg = "No Hugging Face token found. Please login using `huggingface-cli login`"
+            if page_num is not None:
+                return f"Error: {msg}"
+            warnings.warn(msg)
 
         API_URL = f"https://api-inference.huggingface.co/models/{self.lora}"
         headers = {"Authorization": f"Bearer {token}"}
@@ -339,78 +346,85 @@ Return ONLY the illustration description, nothing else."""
         else:
             save_dir = Path(tempfile.mkdtemp())
 
-        print("Generating illustrations... This could take a few minutes.")
-
-        # Create a list of tasks for the progress bar
-        tasks = []
-        if self.title_illustration is None:
-            tasks.append(("title", self.title, None))
-        tasks.extend(
-            (f"page_{i+1}", text, current_illust)
-            for i, (text, current_illust) in enumerate(
-                zip(self.pages, self.illustrations)
+        # Create list of tasks
+        if page_num is not None:
+            if page_num == 0:
+                tasks = [("title", self.title, self.title_illustration)]
+            else:
+                page_idx = page_num - 1
+                tasks = [(f"page_{page_num}", self.pages[page_idx], self.illustrations[page_idx])]
+        else:
+            print("Generating illustrations... This could take a few minutes.")
+            tasks = []
+            if self.title_illustration is None:
+                tasks.append(("title", self.title, None))
+            tasks.extend(
+                (f"page_{i+1}", text, current_illust)
+                for i, (text, current_illust) in enumerate(zip(self.pages, self.illustrations))
             )
-        )
 
-        for task_name, text, current_illust in tqdm(
-            tasks, desc="Generating illustrations"
-        ):
+        for task_name, text, current_illust in tqdm(tasks, desc="Generating illustrations", disable=page_num is not None):
             # Skip if illustration already exists or is explicitly disabled
             if isinstance(current_illust, str) or current_illust is False:
                 continue
 
             try:
-                print(f"\n=== Processing {task_name} ===")
-                print(f"Original text: {text}")
+                if page_num is None:
+                    print(f"\n=== Processing {task_name} ===")
+                    print(f"Original text: {text}")
 
                 if task_name == "title":
                     if not self.title_illustration_prompt:
-                        self.title_illustration_prompt = self._get_illustration_prompt(
-                            text
-                        )
-                    print(
-                        f"Title illustration prompt: {self.title_illustration_prompt}"
-                    )
+                        self.title_illustration_prompt = self._get_illustration_prompt(text)
+                    if page_num is None:
+                        print(f"Title illustration prompt: {self.title_illustration_prompt}")
                     prompt = self._get_prompt(self.title_illustration_prompt)
-                    print(f"Final title image prompt: {prompt}")
+                    if page_num is None:
+                        print(f"Final title image prompt: {prompt}")
                 else:
-                    page_num = int(task_name.split("_")[1]) - 1
-                    if not self.illustration_prompts[page_num]:
-                        self.illustration_prompts[page_num] = (
-                            self._get_illustration_prompt(text)
-                        )
-                    print(f"Illustration prompt: {self.illustration_prompts[page_num]}")
-                    prompt = self._get_prompt(self.illustration_prompts[page_num])
-                    print(f"Final image prompt: {prompt}")
+                    page_idx = int(task_name.split("_")[1]) - 1
+                    if not self.illustration_prompts[page_idx]:
+                        self.illustration_prompts[page_idx] = self._get_illustration_prompt(text)
+                    if page_num is None:
+                        print(f"Illustration prompt: {self.illustration_prompts[page_idx]}")
+                    prompt = self._get_prompt(self.illustration_prompts[page_idx])
+                    if page_num is None:
+                        print(f"Final image prompt: {prompt}")
 
-                response = requests.post(
-                    API_URL, headers=headers, json={"inputs": prompt}
-                )
+                response = requests.post(API_URL, headers=headers, json={"inputs": prompt})
 
                 if response.status_code != 200:
-                    print(
-                        f"Warning: Failed to generate illustration for {task_name}: {response.text}"
-                    )
+                    msg = f"Failed to generate illustration for {task_name}: {response.text}"
+                    if page_num is not None:
+                        return f"Error: {msg}"
+                    print(f"Warning: {msg}")
                     continue
 
                 # Save the image
                 image = Image.open(io.BytesIO(response.content))
                 image_path = save_dir / f"{task_name}.png"
                 image.save(image_path)
-                print(f"Image saved to: {image_path}")
+                if page_num is None:
+                    print(f"Image saved to: {image_path}")
 
                 # Update the appropriate illustration reference
                 if task_name == "title":
                     self.title_illustration = str(image_path)
                 else:
-                    page_num = int(task_name.split("_")[1]) - 1
-                    self.illustrations[page_num] = str(image_path)
+                    page_idx = int(task_name.split("_")[1]) - 1
+                    self.illustrations[page_idx] = str(image_path)
 
             except Exception as e:
-                print(f"Warning: Error generating illustration for {task_name}: {e}")
+                msg = f"Error generating illustration for {task_name}: {e}"
+                if page_num is not None:
+                    return f"Error: {msg}"
+                print(f"Warning: {msg}")
                 continue
 
-        print(f"\nAll illustrations saved to: {save_dir}")
+        if page_num is None:
+            print(f"\nAll illustrations saved to: {save_dir}")
+        else:
+            return "Illustration generated successfully!"
 
     def preview(self) -> None:
         """
@@ -553,6 +567,14 @@ Return ONLY the illustration description, nothing else."""
                     self.illustration_prompts[selected_page - 1] = illustration_prompt
                 return illustration_prompt
 
+            def generate_illustration_page(selected_page: int):
+                self.illustrate(page_num=selected_page)
+                return self.pages
+            
+            def export_book():
+                output_path = self.export()
+                return gr.DownloadButton(output_path, interactive=True)
+
             gr.Markdown(f"<center><h1>{self.title}</h1></center>")
             with gr.Row():
                 with gr.Column():
@@ -578,8 +600,8 @@ Return ONLY the illustration description, nothing else."""
                     )
                     with gr.Row():
                         export_button = gr.Button("Export", variant="secondary")
-                        download_button = gr.Button(
-                            "Download", variant="primary", interactive=False
+                        download_button = gr.DownloadButton(
+                            label="Download", variant="primary", interactive=False
                         )
 
             gallery.select(
@@ -591,6 +613,18 @@ Return ONLY the illustration description, nothing else."""
                 fn=generate_prompt_page,
                 inputs=[selected_page, page],
                 outputs=[prompt],
+                show_progress="minimal",
+            )
+            image_button.click(
+                fn=generate_illustration_page,
+                inputs=[selected_page],
+                outputs=[gallery],
+                show_progress="minimal",
+            )
+            export_button.click(
+                fn=export_book,
+                inputs=[],
+                outputs=[download_button],
                 show_progress="minimal",
             )
 
