@@ -460,10 +460,10 @@ Return ONLY the illustration description, nothing else."""
         # Constants for page layout (matching PowerPoint dimensions and positioning)
         PAGE_WIDTH = 1920
         PAGE_HEIGHT = 1080
-        ILLUSTRATION_WIDTH = 960
-        ILLUSTRATION_HEIGHT = 960
+        ILLUSTRATION_WIDTH = 840
+        ILLUSTRATION_HEIGHT = 840
         ILLUSTRATION_X = (PAGE_WIDTH - ILLUSTRATION_WIDTH) // 2
-        ILLUSTRATION_Y = 270
+        ILLUSTRATION_Y = 120
 
         # Try to load Trebuchet MS font, fall back to Arial if not available
         try:
@@ -521,7 +521,7 @@ Return ONLY the illustration description, nothing else."""
                         print(f"Warning: Could not add title illustration: {e}")
 
                 # Add title text
-                title_y = 0
+                title_y = 40
                 bbox = draw.textbbox((0, 0), self.title, font=title_font)
                 title_width = bbox[2] - bbox[0]
                 draw.text(
