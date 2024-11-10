@@ -1,11 +1,12 @@
 # Drawbook
 
-Drawbook is a Python library that helps you create illustrated children's books using PowerPoint. It leverages AI to generate beautiful watercolor-style illustrations and formats them into a cohesive and visually appealing presentation.
+`drawbook` is a Python library that helps you create illustrated children's books using AI. It leverages image generation AI models to generate watercolor-style illustrations corresponding to text that you have written and then exports them to a PowerPoint / Slides file that you can further edit.
 
 ## Features
 - **AI-Generated Illustrations**: Automatically create watercolor illustrations based on the text you provide.
-- **Book Quickstarter**: Generate an editable presentation (PowerPoint/Google Slides) that serves as a starting point - you can then change the layouts, images, and text to perfect your final design.
-- **User-Friendly API**: Simple and intuitive Python API for creating books with custom titles, pages, and author details.
+- **Create Illustrations Programmatically or with a User-Firendly UI**: Create illustrations with a single of Python -- `.illustrate()` --, or a open up a Gradio UI in your browser -- `.preview()` -- to have more fine-grained control over the illustrations.
+- **Start Quickly, Refine Later**: Export your illustrations a presentation (PowerPoint/Google Slides) that serves as a starting point - you can then change the layouts, images, and text to perfect your final design.
+
 
 ## Installation
 To install Drawbook, use `pip`:
@@ -15,7 +16,7 @@ pip install drawbook
 ```
 
 ## Usage
-Here’s how you can create an illustrated book using Drawbook:
+Here’s how you can create an illustrated book using Drawbook in a few lines of Python:
 
 ```python
 from drawbook import Book
@@ -37,15 +38,13 @@ book.illustrate()  # Generates illustrations for every page
 book.export("Mustafas_Trip_To_Mars.pptx")
 ```
 
-## Example Output
 When you run the code above, Drawbook will generate a PowerPoint file (`Mustafas_Trip_To_Mars.pptx`) that contains:
 - Text content formatted across multiple slides.
 - AI-generated watercolor illustrations that match the content of each page.
 
-## Customization Options
-- **Title Page**: Customize the book’s cover with a unique title and author name.
-- **Illustration Styles**: Choose between different AI styles for varied illustration aesthetics (coming soon).
-- **Slide Layouts**: Configure the layout of text and images within the slides.
+## Preview & Refine
+
+
 
 ## Contributing
 Contributions to Drawbook are welcome! If you have ideas for new features or improvements, feel free to submit an issue or pull request on the [GitHub repository](#).
