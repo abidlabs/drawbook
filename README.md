@@ -32,7 +32,9 @@ book = Book(
     author="Abubakar Abid"
 )
 
-book.create_presentation(output_path="Mustafas_Trip_To_Mars.pptx")
+book.illustrate()  # Generates illustrations for every page
+
+book.export("Mustafas_Trip_To_Mars.pptx")
 ```
 
 ## Example Output
