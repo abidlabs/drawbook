@@ -2,6 +2,8 @@
 
 `drawbook` is a Python library that helps you create illustrated children's books using AI. It leverages image generation AI models to generate watercolor-style illustrations corresponding to text that you have written and then exports them to a PowerPoint / Slides file that you can further edit.
 
+![](https://github.com/abidlabs/drawbook/blob/main/assets/0.png?raw=true)
+
 ## Features
 - **AI-Generated Illustrations**: Automatically create watercolor illustrations based on the text you provide.
 - **Create Illustrations Programmatically or with a User-Firendly UI**: Create illustrations with a single line of Python -- `book.illustrate()` --, or a open up a Gradio UI in your browser -- `book.preview()` -- to have more fine-grained control over the illustrations.
@@ -48,10 +50,12 @@ If you'd like to regenerate the illustrations on any specific page, simply run:
 book.preview()
 ```
 
-This will launch a [Gradio demo](https://gradio.dev/) that  
+This will launch a [Gradio demo](https://gradio.dev/) that lets you see the prompt used to create each illustration. You can edit the prompt and keep re-generating images until you have a great series of illustrations for your book. Once you're down, just click "Export" and then "Download" to get your exported slides.
+
+![](https://github.com/abidlabs/drawbook/blob/main/assets/demo.png?raw=true)
 
 ## Contributing
-Contributions to Drawbook are welcome! If you have ideas for new features or improvements, feel free to submit an issue or pull request on the [GitHub repository](#).
+Contributions to `drawbook` are welcome! If you have ideas for new features or improvements, feel free to submit an issue or pull request on the [GitHub repository](#).
 
 ## License
 Drawbook is open-source software licensed under the [MIT License](LICENSE).
