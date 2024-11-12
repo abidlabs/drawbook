@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "drawbook"
-version = "0.2.0"
+dynamic = ["version"]
 authors = [
     { name = "Your Name", email = "your.email@example.com" },
 ]
@@ -19,4 +19,7 @@ classifiers = [
 
 [project.urls]
 "Homepage" = "https://github.com/yourusername/drawbook"
-"Bug Tracker" = "https://github.com/yourusername/drawbook/issues" 
+"Bug Tracker" = "https://github.com/yourusername/drawbook/issues"
+
+[tool.setuptools.dynamic]
+version = {file = "version.txt"}

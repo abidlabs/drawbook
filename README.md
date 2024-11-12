@@ -63,3 +63,6 @@ Contributions to `drawbook` are welcome! If you have ideas for new features or i
 
 ## License
 Drawbook is open-source software licensed under the [MIT License](LICENSE).
+
+## Version
+The current version can be found in `version.txt` in the root directory, or accessed programmatically via:
