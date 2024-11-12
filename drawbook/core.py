@@ -94,19 +94,23 @@ Return ONLY the illustration description, nothing else."""
             {"role": "user", "content": user_prompt},
         ]
 
-        stream = self.client.chat.completions.create(
-            model="Qwen/Qwen2.5-72B-Instruct",
-            messages=messages,
-            max_tokens=500,
-            stream=True,
-        )
+        try:
+            stream = self.client.chat.completions.create(
+                model="Qwen/Qwen2.5-72B-Instruct",
+                messages=messages,
+                max_tokens=500,
+                stream=True,
+            )
 
-        response = ""
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                response += chunk.choices[0].delta.content
+            response = ""
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    response += chunk.choices[0].delta.content
 
-        return response.strip()
+            return response.strip()
+        except Exception:
+            gr.warning("Could not access Hugging Face Inference API, make sure that you are logged in locally to your Hugging Face account")
+            return text            
 
     def _get_prompt(self, illustration_prompt: str) -> str:
         if self.lora == "SebastianBodza/Flux_Aquarell_Watercolor_v2":

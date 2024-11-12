@@ -8,7 +8,11 @@
 - **AI-Generated Illustrations**: Automatically create watercolor illustrations based on the text you provide.
 - **Create Illustrations Programmatically or with a User-Firendly UI**: Create illustrations with a single line of Python -- `book.illustrate()` --, or a open up a Gradio UI in your browser -- `book.preview()` -- to have more fine-grained control over the illustrations.
 - **Start Quickly, Refine Later**: Export your illustrations a presentation (PowerPoint/Google Slides) that serves as a starting point - you can then change the layouts, images, and text to perfect your final design.
+- **Free**: This project uses the free Hugging Face Inference API to generate illustrations. We strongly recommend having a Hugging Face Pro account so that you do not get rate-limited.
 
+## Prerequisites
+* Python 3.9+
+* Hugging Face Pro membership (strongly recommended, as this project uses the free Hugging Face Inference API)
 
 ## Installation
 To install Drawbook, use `pip`:
