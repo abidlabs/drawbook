@@ -20,6 +20,10 @@ classifiers = [
 ]
 dynamic = ["version", "dependencies"]
 
+[tool.hatch.build]
+only-packages = true
+artifacts = ["*.pyd", "*.so"]
+
 [project.urls]
 "Homepage" = "https://github.com/yourusername/drawbook"
 "Bug Tracker" = "https://github.com/yourusername/drawbook/issues"
