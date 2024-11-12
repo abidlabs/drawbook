@@ -23,3 +23,7 @@ classifiers = [
 
 [tool.setuptools.dynamic]
 version = {file = "version.txt"}
+
+[tool.setuptools.packages.find]
+include = ["drawbook*"]
+exclude = ["assets*"]
