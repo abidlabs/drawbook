@@ -8,6 +8,6 @@ __pycache__/
 
 # Dist files
 dist/
-
+drawbook.egg-info/
 # Mac system files
 .DS_Store 

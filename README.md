@@ -11,7 +11,7 @@
 - **Free**: This project uses the free Hugging Face Inference API to generate illustrations. We strongly recommend having a Hugging Face Pro account so that you do not get rate-limited.
 
 ## Prerequisites
-* Python 3.9+
+* Python 3.10+
 * Hugging Face Pro membership (strongly recommended, as this project uses the free Hugging Face Inference API)
 
 ## Installation
