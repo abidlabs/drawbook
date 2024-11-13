@@ -671,6 +671,16 @@ Return ONLY the illustration description, nothing else."""
                 if not illustration_prompt:
                     illustration_prompt = self._get_illustration_prompt(page_text)
                     yield {prompt: illustration_prompt}
+                else:
+                    if selected_page > 0:
+                        self.illustration_prompts[selected_page - 1] = illustration_prompt
+                    else:
+                        self.title_illustration_prompt = illustration_prompt
+                if selected_page > 0:
+                    self.illustrations[selected_page - 1] = None
+                else:
+                    self.title_illustration = None
+
                 self.illustrate(page_num=selected_page)
                 self.create_preview(page_num=selected_page)
                 print("self.page_previews", self.page_previews)
@@ -700,7 +710,7 @@ Return ONLY the illustration description, nothing else."""
                 show_progress="minimal",
             )
 
-        preview_interface.launch()
+        preview_interface.launch(inline=False)
 
     def save(self, filepath: str | Path = "book.json") -> None:
         """
